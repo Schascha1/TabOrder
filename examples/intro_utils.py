@@ -169,7 +169,7 @@ def simulate_chain_intervention(
         is_intervened[:ctx_N] = False
     X, y_noisefree = gen_split(n_samples, is_intervened)
 
-    
+
 
     # ---- normalize using context stats ----
     ctx_mean = X[:ctx_N].mean(axis=0, keepdims=True)
