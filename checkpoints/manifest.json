@@ -1,0 +1,56 @@
+{
+  "format_version": 2,
+  "checkpoints": [
+    {
+      "checkpoint_id": "additive-unregularized-gp-small",
+      "source_checkpoint": "src/checkpoints/additive-unregularized-gp-small/final.pth",
+      "source_sha256": "e064a44c86c6c5f173ca337509e7bf6f9a6016a110d21ac97e0776e25ec5981a",
+      "release_checkpoint": "checkpoints/taborder-gp-small.pth",
+      "release_sha256": "8a2431366f671fd5e7c53b66b6f930526d706a8679c521af9bc8c6645bb54afa",
+      "training_step_zero_based": 24999,
+      "parameter_count": 2899473,
+      "model_config": {
+        "d_model": 4,
+        "d_classifier": 10,
+        "d_embedding": 128,
+        "K_attention_blocks_order": 6,
+        "K_attention_blocks_pred": 4,
+        "temperature_order": 0.1,
+        "attention_bias": -20.0,
+        "fix_inplace": true,
+        "order_mode": "causal"
+      },
+      "training_metadata_status": "Legacy checkpoint records the step, optimizer and scheduler, but no full run configuration or random seed. Prior settings are inferred from the training scripts and directory name.",
+      "source_files": {
+        "src/causal_foundation_model.py": "4a8543ed124fd95885694ff466f52148ed940a562f81288c0527fad356e97d16",
+        "src/datasets.py": "96b7a7bdfdd712e68ec2d8dd34db56a6a75928c3bdfa6c2225671745c29daeb7",
+        "src/train_model.py": "da2e4e6bfe139c6684fec38c7eca30a150f0ada7649d47137c90aa241dfa72c3"
+      },
+      "model_kind": "order"
+    },
+    {
+      "checkpoint_id": "finetuned-cc18-ctr23-final2",
+      "source_checkpoint": "src/checkpoints/finetuned_cc18_ctr23/final2.pth",
+      "source_sha256": "6e9917a829b7356b5fddd71d46e901fc409d0d3874d8bf88d850db6e1b71a9fc",
+      "release_checkpoint": "checkpoints/taborder-cc18-ctr23.pth",
+      "release_sha256": "9166fa140da600f21cc3440a9cbcd8f0eb8644062319630880ec7443fdd4f831",
+      "parameter_count": 2767888,
+      "model_kind": "dag",
+      "model_config": {
+        "d_model": 4,
+        "d_classifier": 10,
+        "d_embedding": 128,
+        "K_attention_blocks_order": 6,
+        "K_attention_blocks_pred": 4,
+        "temperature_order": 0.1,
+        "attention_bias": -20.0,
+        "order_mode": "causal"
+      },
+      "training_metadata_status": "Raw weights only. Notebook selects final2.pth; original parent is the older mixed-prior general_lo0 model, not the bundled additive GP checkpoint. No optimizer, seed, step or complete run metadata in the weights.",
+      "source_files": {
+        "src/causaldiscovery/causal_order_dag_model.py": "0ac4f25570fb005ec30ade092c64de474c24b71674da7e53ec39506001b5e623",
+        "src/experiments/notebooks/finetune_cc18_ctr23.ipynb": "2ad71c0eb338c2907c4fe60a8b88cbea9ea3e96523b5167d98ea150715c53e7e"
+      }
+    }
+  ]
+}

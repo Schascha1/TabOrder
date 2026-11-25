@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taborder"
+version = "0.1.0"
+description = "TabOrder model and synthetic Gaussian-process SCM prior"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["torch>=2.7,<3", "numpy>=1.24,<3", "networkx>=3,<4"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["taborder*"]
