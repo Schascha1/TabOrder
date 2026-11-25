@@ -5,6 +5,29 @@ tabular data. This initial release contains the TabOrder model, its synthetic
 Gaussian-process SCM training prior, an additive GP checkpoint, and weights
 fine-tuned jointly on CC18 and CTR23.
 
+Start with [the introductory notebook](examples/intro.ipynb). It reconstructs
+Figure 1 from the paper's saved predictions, then runs fresh synthetic order
+recovery, imputation with both checkpoints, and a three-variable intervention
+experiment. The default run works offline on CPU.
+
+```sh
+python -m pip install -e '.[notebook]'
+jupyter lab examples/intro.ipynb
+```
+
+To execute it without opening Jupyter:
+
+```sh
+python examples/run_intro.py
+```
+
+Figures, per-seed metrics, and an executed notebook are saved in `outputs/intro/`.
+The notebook distinguishes the saved Figure 1 predictions from fresh runs with
+the released additive GP model. A fresh TabPFN comparison is optional and may
+require separately downloaded weights; its historical version was not recorded.
+
+![Figure 1 reconstructed from the paper's saved predictions](examples/figure1.png)
+
 ## Install and run
 
 Python 3.10 or newer is required. Run these commands from this directory:
@@ -41,7 +64,7 @@ variance = outputs[4][..., 1].exp()
 
 ## Model and data interfaces
 
-`CausalOrderModel` takes a tensor of shape `(batch, rows, columns, 4)`.
+Both model variants take a tensor of shape `(batch, rows, columns, 4)`.
 The four channels hold the value, missing-value indicator, categorical flag,
 and number of categories. The released synthetic prior generates continuous
 variables, so the last two channels are zero. Missing values are filled with
@@ -68,6 +91,25 @@ Context normalization fits each column on its observed context entries. Outputs
 and ground truth are in normalized units. The legacy context-mean fill is
 preserved, including its use of synthetic ground-truth context values; this
 generator is a training prior, not a preprocessing API for real missing data.
+
+For an actual continuous table, use the inference helper instead:
+
+```python
+import numpy as np
+from taborder import impute_table
+
+# values has shape (rows, columns), with context rows followed by query rows.
+# Missing entries may be NaN. Only observed context entries fit normalization.
+missing = np.isnan(values)
+result = impute_table(model, values, missing, context_size=n_context)
+filled_values = result["imputed"]  # original units; observed entries preserved
+```
+
+Each column requires at least one observed context entry. For intervention
+prediction, the notebook infers an order from observational context once and
+passes it through `order_scores_override` for both query regimes. The optional
+override changes the attention mask without changing the checkpoint weights;
+omitting it preserves the existing forward behavior.
 
 ## Checkpoints
 
@@ -106,10 +148,10 @@ Hashes and source identifiers are recorded in `checkpoints/manifest.json`.
 Training scripts associate this checkpoint with additive GP data, 5–10 variables,
 and no order supervision (`lambda_order=0`). The legacy checkpoint does not
 record a full training configuration or seed. These two weights support a core
-model release; they do not reproduce the entire paper. In particular, newer
-rebuttal experiments use separately trained mask-fixed checkpoints, and ablations
-use additional models. No numerical closeness to those results has been
-established. See `RELEASE_NOTES.md` for the result coverage and evidence.
+model release focused on synthetic order recovery, imputation, and intervention
+examples. The notebook's offline real-table imputation example does not reproduce
+the full CC18/CTR23 aggregate ranks. See `RELEASE_NOTES.md` for provenance and
+the scope of the figure reproduction.
 
 ## Train
 

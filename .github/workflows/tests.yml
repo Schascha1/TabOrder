@@ -17,3 +17,16 @@ jobs:
       - run: python examples/quickstart.py --checkpoint checkpoints/taborder-cc18-ctr23.pth
       - run: python -m taborder.train --steps 2 --batch-size 1 --min-seq-len 32 --max-seq-len 32 --device cpu --output runs/smoke.pth
       - run: python examples/quickstart.py --checkpoint runs/smoke.pth
+  intro:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install '.[notebook]'
+      - run: python examples/run_intro.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: intro-notebook-and-figures
+          path: outputs/intro/

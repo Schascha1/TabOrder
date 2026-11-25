@@ -1,14 +1,44 @@
 # Core model release
 
-Publication destination: `Schascha1/TabOrder`.
+Public repository: https://github.com/Schascha1/TabOrder
 
-This directory contains the core models, synthetic training prior, compact
-trainer, CPU example, tests, and two checkpoints. Full benchmark suites,
-third-party baselines, real datasets, fine-tuning scripts, and experiment outputs
-remain outside this release. This release supports model use; it is not a
-complete experiment-reproduction package.
+The release focuses on synthetic causal-order recovery, missing-value imputation,
+and intervention prediction. Start with `examples/intro.ipynb`; its default run
+is offline and uses the two bundled checkpoints. The full benchmark collection,
+third-party baseline code, and unrelated ablation models are outside this scope.
 
-## Weights and provenance
+## Notebook and Figure 1
+
+| Experiment | What runs |
+| --- | --- |
+| Figure 1 | Reconstruct the original two panels from all 500 saved paper predictions. Same plotted values, with Matplotlib layout rather than TikZ. |
+| Synthetic order | Fresh additive GP tables with five variables and 0%, 20%, and 40% missingness; compare inferred orders with random orders across five seeds. |
+| Imputation | Fresh synthetic GP tables and the offline diabetes feature table; compare context mean, KNN, GP weights, and CC18/CTR23 weights on the same missing query cells across three seeds. |
+| Intervention | Fresh paired observational/intervened queries in the original example's spline chain, using seed 20 and the bundled additive GP model. Infer and freeze an order from context; compare with an explicitly labelled random forest baseline. |
+| Optional TabPFN | Opt-in fresh inference, requiring a separate compatible checkpoint or model download. It is not run by default. |
+
+The Figure 1 data come from
+`paper/expres/three_variable_intervention_predictions.csv`; a checksum and
+source settings are in `examples/data/figure1_manifest.json`. The corresponding
+research notebook is `src/experiments/notebooks/three_variable_intervention_failure.ipynb`.
+That notebook selects the non-additive GP checkpoint, which is not bundled.
+The historical TabPFN version was not recorded in the CSV, so the optional
+fresh comparison is not presented as an exact numerical rerun of Figure 1.
+
+The live intervention uses paired query rows with identical X and Y, changing
+only query Z. It also uses fewer rows and freezes an observational-context order,
+so its metrics are distinct from Figure 1's saved mixed-regime query predictions.
+The known chain order is not supplied to the model. The learned order is printed,
+including if it is wrong; seeds and results are not selected to force success.
+
+The imputation example is a compact model-use demonstration, not a reproduction
+of CC18/CTR23 aggregate ranks. Scaling and KNN fitting use observed context only;
+hidden truth is replaced with NaN before encoding. The offline diabetes table is
+not asserted to have been excluded from historical fine-tuning. Reproducing the
+full CC18/CTR23 tables would also require their data preparation and downstream
+models, not only the weights.
+
+## Weights and source provenance
 
 | Public file | Research source |
 | --- | --- |
@@ -21,56 +51,33 @@ complete experiment-reproduction package.
 
 The checkpoint manifest records source and export SHA-256 hashes, architectures,
 evaluation settings, and missing training metadata. Optimizer state is omitted.
-The fine-tuning notebook selects `final2.pth` for CC18/CTR23 evaluation; the other
-file, `final.pth`, is not bundled. The notebook starts from the older mixed-prior
+The fine-tuning notebook selects `final2.pth` and starts from the older mixed-prior
 `METHOD_cfm_dfm-0_ep-25000_ft-0_gf-default_gn-default_gs-single_lo-0_vrng-5-10`
-checkpoint. The released fine-tuned weights must not be described as a
-fine-tuned version of the bundled additive GP model.
+checkpoint. The released fine-tuned weights therefore do not descend from the
+bundled additive GP model.
 
-The two model variants deliberately preserve their distinct forward behavior.
-The additive GP source includes later strict evaluation attention and cloned
-parent-mask fixes. The fine-tuned DAG variant uses finite evaluation attention
-bias, masked column-score normalization, and its original parent-attention head.
-Both load strictly; no learned parameters are skipped or randomly filled.
-Plotting, OpenML, and regression-pruning imports are removed from the core
-modules. The additive model's input/output docstring is corrected.
+The two model variants preserve their distinct default forward behavior.
+The additive GP source includes the later strict evaluation attention and cloned
+parent-mask fixes. The fine-tuned DAG variant retains finite attention bias and
+masked column-score normalization. Both load strictly, without skipping learned
+parameters. The public additive model additionally accepts an optional order
+score override, matching the DAG variant's existing interface. This enables
+context-frozen intervention prediction and changes no checkpoint tensors.
 
-## Which results are covered?
+`taborder/inference.py` adds observed-context-only normalization and mean filling
+for actual tables. This is separate from the legacy synthetic generator, whose
+historical behavior is retained. Plotting, OpenML, and regression-pruning imports
+have been removed from the core model modules. Notebook dependencies are optional.
 
-This table is based on checkpoint references in the research scripts and
-notebooks. It establishes provenance, not a fresh benchmark replication.
+## Validation
 
-| Result family | Coverage with these two weights |
-| --- | --- |
-| Jointly fine-tuned CC18/CTR23 results | `finetune_cc18_ctr23.ipynb` explicitly selects the bundled `final2.pth`. Reproduction still requires its data preparation, splits, masks, and downstream evaluation. |
-| Additive GP synthetic order baseline | Bundled GP model is an active default in `order_discovery.py`. Non-additive GP and spline comparison rows need their own checkpoints. |
-| Original Sachs intervention notebook | `sachs_ood.ipynb` selects the bundled additive GP model, then performs additional fine-tuning. The final adapted model is not bundled. |
-| Original three-variable intervention notebook | Selects `non-additive-unregularized-gp-small`, which is not bundled. |
-| Newer eight-variable intervention experiments | `rebuttal/03_interventions.ipynb` selects `additive-unregularized-gp-small-maskfix` and separate native ablation checkpoints. Not covered exactly. |
-| Newer REGED environment results | `rebuttal/11_reged_environments.ipynb` selects `additive-unregularized-gp-small-maskfix`. Not covered exactly. |
-| Robustness, diagnostics, and architecture ablations | Rebuttal notebooks select mask-fixed additive/non-additive models and multiple independently trained seeds. Not covered by these two weights. |
-| Scalability comparisons | Model-size sweeps use additional checkpoints. Not covered by the small GP model alone. |
-| Other-method baselines | Require the separate baseline implementations and evaluation setup. |
+Core tests cover checkpoint hashes and loading, finite predictions, padding,
+generator reproducibility, gradient flow, hidden-ground-truth independence,
+observed-value preservation, and blocking descendant effects with a fixed mask.
+The default notebook is executed end to end locally; CI also executes it and
+uploads the generated figures, metrics, and executed notebook as an artifact.
+The optional fresh TabPFN path, GPU execution, full CC18/CTR23 benchmark, and
+full pretraining recipe have not been run for this notebook update.
 
-The mask-fixed pretrained files referenced above are absent from this checkout.
-They are distinct training runs, not another name for the bundled GP weights.
-There is no measured basis to claim that replacing them with these weights
-reproduces the reported numbers or is quantitatively close enough.
-
-## Validation and publication status
-
-The original release preparation validated the additive model, generator,
-training path, and portable installation with Python 3.10.12, PyTorch 2.7.1,
-NumPy 2.2.6, and NetworkX 3.4.2. The expanded tests additionally verify the
-fine-tuned model's strict loading, finite predictions, parameter count, and
-both checkpoint checksums. The checkpoint tensors and model outputs are also
-compared against the corresponding research implementations locally.
-
-These checks are not full CC18/CTR23 or paper benchmark runs. GPU execution and
-the full training recipe have not been validated for this preparation. PyTorch
-2.7 emits deprecation warnings for mixed boolean/additive attention masks.
-
-No code license or weight license has been selected; none has been invented.
-Add the final citation when available. Publish only this standalone directory
-to the public repository, keeping the unrelated research files and history out.
-The weights total about 23 MB and can be stored directly in Git.
+No code license or weight license has been selected. The weights total about
+23 MB and can be stored directly in Git.

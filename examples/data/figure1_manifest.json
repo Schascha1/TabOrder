@@ -1,0 +1,20 @@
+{
+  "description": "Saved predictions used by paper Figure 1; plotting reproduction, not fresh model inference.",
+  "source": "paper/expres/three_variable_intervention_predictions.csv",
+  "sha256": "195da1f877d158a597162db10ece3ba5e6726cfcbefe3060240278e2cf4bb329",
+  "figure_source": "paper/figs/three_variable_intervention.tex",
+  "experiment_notebook": "src/experiments/notebooks/three_variable_intervention_failure.ipynb",
+  "original_taborder_checkpoint": "non-additive-unregularized-gp-small/final.pth",
+  "tabpfn_version": "Not recorded in the prediction CSV; not inferred from current defaults.",
+  "settings": {
+    "seed": 20,
+    "n_samples": 1000,
+    "context_size": 500,
+    "funform": "spline",
+    "mech_mode": "additive",
+    "noise_scale": 0.1,
+    "intervention_type": "hard",
+    "intervene_frac": 0.5
+  },
+  "reproduction_scope": "Same plotted values, reconstructed with Matplotlib rather than the paper TikZ layout."
+}

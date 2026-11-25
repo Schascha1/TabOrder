@@ -141,11 +141,14 @@ class CausalOrderModel(nn.Module):
         self.attention_bias = attention_bias
 
 
-    def forward(self, x, col_mask=None, row_mask=None, query_indicator=None):
+    def forward(self, x, col_mask=None, row_mask=None, query_indicator=None, order_scores_override=None):
         """
         x: (B, N, C, D_in), channels = value, missing flag, type, categories
         col_mask: (B, C)    # bool, True=PAD column
         row_mask: (B, N) # bool, True=PAD row
+        order_scores_override: optional (B, C) scores used for attention masking;
+          e.g. scores inferred once from observational context. The returned
+          order scores remain the scores inferred from this input.
         Returns:
           edge_scores, pairwise_order, order_scores, missing_parent_scores,
           mean_and_log_variance, variance_bias_terms, parent_attention
@@ -189,6 +192,12 @@ class CausalOrderModel(nn.Module):
         order_std  = order_scores.std(dim=1, keepdim=True).clamp_min(1e-3)
         order_scores = (order_scores - order_mean) / order_std
 
+        order_scores_used = order_scores
+        if order_scores_override is not None:
+            order_scores_used = torch.as_tensor(order_scores_override, device=x.device, dtype=order_scores.dtype)
+            if order_scores_used.shape != order_scores.shape or not order_scores_used.isfinite().all():
+                raise ValueError("order_scores_override must be finite with shape (batch, columns)")
+
         if self.order_mode == "noorder":
             p_ancestor = torch.ones((B, C, C), device=x.device, dtype=x.dtype)
             eye = torch.eye(C, device=x.device, dtype=torch.bool)[None]
@@ -197,7 +206,7 @@ class CausalOrderModel(nn.Module):
         else:
             # delta_ij = score_i - score_j
             # if score_i > score_j => i is an ancestor of j => i may attend to j
-            delta = (order_scores[:,:,None] - order_scores[:,:,None].transpose(1,2))/self.temperature_order  # (B, C, C)
+            delta = (order_scores_used[:,:,None] - order_scores_used[:,:,None].transpose(1,2))/self.temperature_order  # (B, C, C)
 
             # p_ancestor[i,j] ~ probability that j is ancestor of i
             p_ancestor = torch.sigmoid(delta * 1)
