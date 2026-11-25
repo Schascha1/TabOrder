@@ -1,167 +1,133 @@
 # TabOrder
 
-Core research code for learning causal orders and predicting missing values in
-tabular data. This initial release contains the TabOrder model, its synthetic
-Gaussian-process SCM training prior, an additive GP checkpoint, and weights
-fine-tuned jointly on CC18 and CTR23.
+TabOrder learns causal variable orderings and uses them to guide attention for
+in-context tabular prediction and missing-value imputation. It learns from a
+likelihood objective without ground-truth causal orders.
 
-Start with [the introductory notebook](examples/intro.ipynb). It reconstructs
-Figure 1 from the paper's saved predictions, then runs fresh synthetic order
-recovery, imputation with both checkpoints, and a three-variable intervention
-experiment. The default run works offline on CPU.
+Official implementation of **[Learning Causal Orderings for In-Context Tabular Prediction](https://eda.rg.cispa.io/pubs/2026/taborder-xu,mameche,vreeken.pdf)**
+
+Sascha Xu, Sarah Mameche, and Jilles Vreeken · **NeurIPS 2026**
+
+[Paper](https://eda.rg.cispa.io/pubs/2026/taborder-xu,mameche,vreeken.pdf) ·
+[Introductory notebook](examples/intro.ipynb) ·
+[Pretrained weights](#pretrained-weights)
+
+![Prediction under intervention in a three-variable chain](examples/figure1.png)
+
+*Figure 1 from the paper, reconstructed from the saved predictions. The task is
+to predict the mediator Y in X → Y → Z, before and after an intervention on the
+mechanism generating Z. Green and orange points show observational and
+intervened predictions; the black curve is the generating function.*
+
+## Getting started
+
+Requires Python 3.10 or newer. Clone the repository to obtain the code, notebooks,
+and pretrained weights:
 
 ```sh
+git clone https://github.com/Schascha1/TabOrder.git
+cd TabOrder
 python -m pip install -e '.[notebook]'
 jupyter lab examples/intro.ipynb
 ```
 
-To execute it without opening Jupyter:
+The [introductory notebook](examples/intro.ipynb) runs on CPU and works offline by
+default. It covers:
+
+| Example | What you can run |
+| --- | --- |
+| Figure 1 | Recreate the paper's two-panel plot from the saved prediction data. |
+| Synthetic order recovery | Generate additive GP structural causal models and compare inferred orders with random orders at several missingness levels. |
+| Imputation | Compare both checkpoints with mean and KNN imputation on synthetic data and an offline real table. |
+| Intervention prediction | Infer an order from observational context and compare predictions before and after changing a downstream mechanism. |
+
+To execute the notebook without opening Jupyter:
 
 ```sh
 python examples/run_intro.py
 ```
 
-Figures, per-seed metrics, and an executed notebook are saved in `outputs/intro/`.
-The notebook distinguishes the saved Figure 1 predictions from fresh runs with
-the released additive GP model. A fresh TabPFN comparison is optional and may
-require separately downloaded weights; its historical version was not recorded.
+Figures, per-seed metrics, run metadata, and an executed notebook are written to
+`outputs/intro/`. The notebook distinguishes the saved paper predictions from
+fresh experiments with the bundled weights. Fresh TabPFN inference is optional;
+see the notebook for its additional dependencies and model access requirements.
 
-![Figure 1 reconstructed from the paper's saved predictions](examples/figure1.png)
-
-## Install and run
-
-Python 3.10 or newer is required. Run these commands from this directory:
+For a minimal installation and a short synthetic-data example:
 
 ```sh
 python -m pip install -e .
 python examples/quickstart.py
-python -m unittest discover -s tests -v
 ```
 
-The example runs on CPU and generates its own data. The only runtime dependencies
-are PyTorch, NumPy, and NetworkX. GPU execution is available with
-`python examples/quickstart.py --device cuda` and a CUDA-enabled PyTorch install.
+The core package requires only PyTorch, NumPy, and NetworkX. To use a GPU, install
+a CUDA-enabled PyTorch build and pass `--device cuda` to the quickstart.
+
+## Pretrained weights
+
+Both checkpoints are included in the repository and load through the same API:
+
+| Checkpoint | Training | Parameters |
+| --- | --- | --- |
+| `checkpoints/taborder-gp-small.pth` | Additive GP SCMs with 5–10 variables, without causal-order supervision | 2,899,473 |
+| `checkpoints/taborder-cc18-ctr23.pth` | Joint fine-tuning on CC18 and CTR23 | 2,767,888 |
 
 ```python
-import torch
-from taborder import SyntheticDataset, load_model
+from taborder import load_model
 
-torch.manual_seed(42)
-data = SyntheticDataset(
-    variable_mode="additive-gp", variable_range=(5, 10),
-    parent_range=(1, 3), noise_var_range=(0.1, 0.5),
-    batch_size=1, min_seq_len=128, max_seq_len=128, seed=42,
-)
-x, row_mask, col_mask, truth, query, dags, masked, *_ = next(iter(data))
-model = load_model("checkpoints/taborder-gp-small.pth")
-with torch.inference_mode():
-    outputs = model(x, row_mask=row_mask, col_mask=col_mask, query_indicator=query)
-scores = outputs[2]                 # (batch, columns); smaller means earlier
-order = scores.argsort(dim=-1)
-mean = outputs[4][..., 0]           # (batch, rows, columns)
-variance = outputs[4][..., 1].exp()
+model = load_model("checkpoints/taborder-gp-small.pth", device="cpu")
+# For the fine-tuned model:
+model = load_model("checkpoints/taborder-cc18-ctr23.pth", device="cpu")
 ```
 
-## Model and data interfaces
+The loader selects the matching architecture, restores evaluation settings, and
+loads every parameter strictly. Both models use six order blocks, four prediction
+blocks, and 128-dimensional embeddings. Checkpoint hashes and provenance are
+recorded in
+[`checkpoints/manifest.json`](checkpoints/manifest.json).
 
-Both model variants take a tensor of shape `(batch, rows, columns, 4)`.
-The four channels hold the value, missing-value indicator, categorical flag,
-and number of categories. The released synthetic prior generates continuous
-variables, so the last two channels are zero. Missing values are filled with
-context means and separately flagged. Row and column padding masks are boolean,
-with `True` meaning padding; provide both masks, including for unpadded tables.
+## Impute your own table
 
-The seven forward outputs are edge scores, pairwise order probabilities, order
-scores, missing-parent scores, mean/log-variance predictions, variance-bias
-terms, and parent attention weights. Parent matrices use `[child, parent]`.
-Attention weights are model internals, rather than calibrated edge probabilities.
-`query_indicator` is accepted for compatibility; the current architecture does
-not use it to enforce context/query attention separation.
-
-`SyntheticDataset` yields the original 12-item training tuple: encoded input,
-row padding, column padding, unmasked values, query indicator, DAGs, missing-cell
-mask, ancestor indicator, valid-cell indicator, parent availability, target
-indices, and column types. Ancestor indicators use `[ancestor, descendant]`.
-The generator supports additive and non-additive GP mechanisms, approximated by
-256 random Fourier features, as well as the existing spline mode.
-
-The batch shares one sampled DAG, while each table samples its mechanisms.
-`seed` controls NumPy draws; also set `torch.manual_seed` for PyTorch draws.
-Context normalization fits each column on its observed context entries. Outputs
-and ground truth are in normalized units. The legacy context-mean fill is
-preserved, including its use of synthetic ground-truth context values; this
-generator is a training prior, not a preprocessing API for real missing data.
-
-For an actual continuous table, use the inference helper instead:
+Use `impute_table` for continuous-valued tables. Supply a NumPy array with context
+rows first and query rows afterwards; mark missing entries with `NaN`.
 
 ```python
 import numpy as np
-from taborder import impute_table
+from taborder import impute_table, load_model
 
-# values has shape (rows, columns), with context rows followed by query rows.
-# Missing entries may be NaN. Only observed context entries fit normalization.
-missing = np.isnan(values)
-result = impute_table(model, values, missing, context_size=n_context)
-filled_values = result["imputed"]  # original units; observed entries preserved
-```
-
-Each column requires at least one observed context entry. For intervention
-prediction, the notebook infers an order from observational context once and
-passes it through `order_scores_override` for both query regimes. The optional
-override changes the attention mask without changing the checkpoint weights;
-omitting it preserves the existing forward behavior.
-
-## Checkpoints
-
-| File | Purpose | Model variant |
-| --- | --- | --- |
-| `checkpoints/taborder-gp-small.pth` | Unregularized additive GP pretraining | `CausalOrderModel` |
-| `checkpoints/taborder-cc18-ctr23.pth` | Joint CC18/CTR23 fine-tuning, exported from `final2.pth` | `CausalOrderDAGModel` |
-
-Both use `load_model`, which selects the recorded architecture and loads every
-parameter strictly. The fine-tuned model has 2,767,888 parameters. It descends
-from an older mixed-prior pretrained model, not the additive GP checkpoint.
-Its model variant retains the finite evaluation attention bias used by the
-CC18/CTR23 notebook; the additive GP model uses the current strict evaluation
-mask. These variants share an input/output interface, but their forward passes
-are not interchangeable.
-
-```python
 model = load_model("checkpoints/taborder-cc18-ctr23.pth")
+
+# values: a (rows, columns) NumPy array containing your table.
+# n_context: the number of reference rows at the start of the table.
+result = impute_table(
+    model,
+    values,
+    missing=np.isnan(values),
+    context_size=n_context,
+)
+filled_values = result["imputed"]
+order = result["order_scores"].argsort()  # earlier variables first
 ```
 
-To check loading and inference with synthetic inputs:
+The helper fits normalization on observed context entries and returns imputed
+values in the original units, preserving observed entries. Each column requires
+at least one observed context value. The notebook also shows how to infer an
+order from observational context and hold it fixed for intervention prediction.
 
-```sh
-python examples/quickstart.py --checkpoint checkpoints/taborder-cc18-ctr23.pth
-```
+## Generate data and train
 
-This is an inference smoke check, not a CC18/CTR23 benchmark evaluation.
+`SyntheticDataset` generates random DAGs and nonlinear structural mechanisms,
+including additive and non-additive Gaussian processes approximated with random
+Fourier features. See the notebook and
+[`examples/quickstart.py`](examples/quickstart.py) for the input and mask format.
 
-`checkpoints/taborder-gp-small.pth` exports the tensor weights from
-`additive-unregularized-gp-small/final.pth`. It has 2,899,473 parameters, six order
-blocks, four prediction blocks, 128-dimensional embeddings, and a recorded
-training step of 24,999 (25,000 updates). Optimizer and scheduler state have been
-removed. Evaluation settings are stored with the weights; loading is strict.
-Hashes and source identifiers are recorded in `checkpoints/manifest.json`.
-
-Training scripts associate this checkpoint with additive GP data, 5–10 variables,
-and no order supervision (`lambda_order=0`). The legacy checkpoint does not
-record a full training configuration or seed. These two weights support a core
-model release focused on synthetic order recovery, imputation, and intervention
-examples. The notebook's offline real-table imputation example does not reproduce
-the full CC18/CTR23 aggregate ranks. See `RELEASE_NOTES.md` for provenance and
-the scope of the figure reproduction.
-
-## Train
+Train an additive GP model with:
 
 ```sh
 python -m taborder.train --output runs/gp-small.pth
 ```
 
-The default recipe uses additive GP data, 5–10 variables, 512–1024 rows,
-20% MCAR masking, Gaussian NLL, AdamW, and 25,000 updates. To check the training
-path on CPU:
+The default recipe uses 5–10 variables, 512–1024 rows, 20% MCAR masking, Gaussian
+negative log-likelihood, and 25,000 updates. For a short CPU training run:
 
 ```sh
 python -m taborder.train --steps 2 --batch-size 1 \
@@ -169,7 +135,33 @@ python -m taborder.train --steps 2 --batch-size 1 \
 python examples/quickstart.py --checkpoint runs/smoke.pth
 ```
 
-This compact trainer starts a new run and saves inference weights and its
-configuration. It preserves the core objective and schedule while using full
-precision, single-process data generation, and the existing autograd fix.
-It does not reproduce the old checkpoint bit for bit or support resuming.
+The compact trainer saves weights and configuration for inference. It starts a
+new run and does not support resuming. For checkpoint provenance and the scope
+of the included experiments, see the [release notes](RELEASE_NOTES.md).
+
+## Development
+
+```sh
+python -m unittest discover -s tests -v
+```
+
+CI runs the tests and executes the introductory notebook, making its figures
+and metrics available as a workflow artifact.
+
+## Citation
+
+If you use TabOrder in your research, please cite our paper:
+
+Sascha Xu, Sarah Mameche, and Jilles Vreeken.
+[Learning Causal Orderings for In-Context Tabular Prediction](https://eda.rg.cispa.io/pubs/2026/taborder-xu,mameche,vreeken.pdf).
+NeurIPS, 2026.
+
+```bibtex
+@inproceedings{xu2026taborder,
+  title     = {Learning Causal Orderings for In-Context Tabular Prediction},
+  author    = {Xu, Sascha and Mameche, Sarah and Vreeken, Jilles},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year      = {2026},
+  url       = {https://eda.rg.cispa.io/pubs/2026/taborder-xu,mameche,vreeken.pdf}
+}
+```
